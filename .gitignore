@@ -102,3 +102,8 @@ dist
 
 # TernJS port file
 .tern-port
+
+# exclude everything
+home/
+# exception to the rule
+!home/.gitkeep 

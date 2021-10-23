@@ -1,0 +1,22 @@
+{
+  "name": "http-server",
+  "version": "1.0.0",
+  "description": "HTTP 1.0 Server",
+  "main": "https.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/saeedrahmo/http-server.git"
+  },
+  "author": "Saeed Rahmani",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/saeedrahmo/http-server/issues"
+  },
+  "homepage": "https://github.com/saeedrahmo/http-server#readme",
+  "dependencies": {
+    "yargs": "^17.2.1"
+  }
+}
