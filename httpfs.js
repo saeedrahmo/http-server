@@ -3,8 +3,11 @@ const yargs = require("yargs");
 const path = require("path");
 const fs = require("fs");
 
-const testFolder = "./tests/";
-
+//TODO: close socket/server connection
+//TODO: if .protected inside dir return 403
+// HTTP/1.1 403 Forbidden
+// Date: Wed, 21 Oct 2015 07:28:00 GMT
+// TODO: post file write json
 const argv = yargs
   .usage("node echoserver.js [--port port]")
   .option("v", {
@@ -131,19 +134,39 @@ function handleClient(socket) {
           const httpCode = "200 OK";
           const serverDate = new Date().toString();
           const serverVersion = `Node.js/${process.version}`;
-          var response = `HTTP/1.1 ${httpCode}\nDate: ${serverDate}\nContent-Type: application/json\nContent-Length: ${contentLength}\nConnection: close\nServer: ${serverVersion}\n\n${jsonFiles}`;
 
+          var response = `HTTP/1.1 ${httpCode}\nDate: ${serverDate}\nContent-Type: application/json\nContent-Length: ${contentLength}\nConnection: close\nServer: ${serverVersion}\n\n${jsonFiles}`;
           socket.write(response);
         } else {
           const reqFileName = reqAddress.substring(1);
+          console.log(`REQ: ${reqFileName}`);
 
           const allFiles = fs.readdirSync(path.resolve(__dirname, homeDir));
+          var isFileExisted = false;
           for (const item of allFiles) {
             const extname = path.extname(item);
             const filename = path.basename(item, extname);
+            const absolutePath = path.resolve(homeDir, item);
             if (reqFileName == filename) {
-              console.log(item);
+              isFileExisted = true;
+              //console.log(absolutePath);
+
+              var fileContent = fs.readFileSync(absolutePath);
+
+              const contentLength = fileContent.length;
+              const httpCode = "200 OK";
+              const serverDate = new Date().toString();
+              const serverVersion = `Node.js/${process.version}`;
+
+              var response = `HTTP/1.1 ${httpCode}\nDate: ${serverDate}\nContent-Type: application/json\nContent-Length: ${contentLength}\nConnection: close\nServer: ${serverVersion}\n\n${fileContent}\n\n`;
+              socket.write(response);
             }
+          }
+
+          if (isFileExisted == false) {
+            //TODO: 404.txt
+            var response = "HTTP/1.0 404 NOT FOUND\n\nFile Not Found";
+            socket.write(response);
           }
         }
       }
