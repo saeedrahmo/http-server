@@ -38,8 +38,10 @@ const server = net.createServer(handleClient).on("error", (err) => {
 
 // TODO: family: "IPv4", address: "127.0.0.1"
 server.listen({ port: argv.port }, () => {
-  console.log(argv);
-  console.log("Echo server is listening at %j", server.address());
+  if (argv.v) {
+    console.log(argv);
+    console.log("Echo server is listening at %j", server.address());
+  }
 });
 
 // HTTP/1.1 200 OK
@@ -114,7 +116,8 @@ function readFilesSync(dir) {
 }
 
 function handleClient(socket) {
-  console.log("New client from %j", socket.address());
+  console.log(argv);
+  if (argv.v) console.log("New client from %j", socket.address());
   socket
     .on("data", (buf) => {
       var req = buf.toString("utf-8");
@@ -122,6 +125,16 @@ function handleClient(socket) {
       var reqType = reqSplit[0].split(/\s+/)[0];
       var reqAddress = reqSplit[0].split(/\s+/)[1];
       var homeDir = "." + argv.d;
+
+      // console.log(`reqSplit:${reqSplit}`);
+      // console.log(`ADRESS:${reqAddress}`);
+
+      var reqAddress2 = reqAddress.split("/");
+      // console.log(`reqAddress2: ${reqAddress2.length}`);
+      // console.log(`reqAddress2: ${reqAddress2[reqAddress2.length - 1]}`);
+      // console.log(
+      //   `slice: ${reqAddress2.slice(0, reqAddress2.length - 1).join("/")}`
+      // );
 
       if (reqType.toLowerCase() == "get") {
         if (reqAddress == "/") {
@@ -138,12 +151,28 @@ function handleClient(socket) {
           var response = `HTTP/1.1 ${httpCode}\nDate: ${serverDate}\nContent-Type: application/json\nContent-Length: ${contentLength}\nConnection: close\nServer: ${serverVersion}\n\n${jsonFiles}`;
           socket.write(response);
         } else {
-          const reqFileName = reqAddress.substring(1);
-          console.log(`REQ: ${reqFileName}`);
+          var allFiles = fs.readdirSync(path.resolve(__dirname, homeDir));
+          var reqFileName = reqAddress.substring(1);
+          var reqAddress2 = reqAddress.split("/");
+          if (reqAddress2.length != 2) {
+            homeDir =
+              homeDir + reqAddress2.slice(0, reqAddress2.length - 1).join("/");
+            allFiles = fs.readdirSync(path.resolve(__dirname, homeDir));
+            reqFileName = reqAddress2[reqAddress2.length - 1];
+          }
 
-          const allFiles = fs.readdirSync(path.resolve(__dirname, homeDir));
+          // console.log(`REQ: ${reqFileName}`);
+          // console.log(`allFiles: ${allFiles}`);
+
           var isFileExisted = false;
           for (const item of allFiles) {
+            if (allFiles.includes(".protected")) {
+              var response = `HTTP/1.1 403 Forbidden\r\n`;
+              socket.write(response);
+              isFileExisted = true;
+              break;
+            }
+
             const extname = path.extname(item);
             const filename = path.basename(item, extname);
             const absolutePath = path.resolve(homeDir, item);
@@ -157,21 +186,76 @@ function handleClient(socket) {
               const httpCode = "200 OK";
               const serverDate = new Date().toString();
               const serverVersion = `Node.js/${process.version}`;
+              const contentType = "application/json";
 
-              var response = `HTTP/1.1 ${httpCode}\nDate: ${serverDate}\nContent-Type: application/json\nContent-Length: ${contentLength}\nConnection: close\nServer: ${serverVersion}\n\n${fileContent}\n\n`;
+              var response = `HTTP/1.1 ${httpCode}\r\nDate: ${serverDate}\r\nContent-Type: ${contentType}\r\nContent-Length: ${contentLength}\r\nConnection: close\r\nServer: ${serverVersion}\r\n\r\n${fileContent}`;
               socket.write(response);
+              break;
             }
           }
 
           if (isFileExisted == false) {
-            //TODO: 404.txt
-            var response = "HTTP/1.0 404 NOT FOUND\n\nFile Not Found";
+            const htmlContent = `<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">\r\n<title>404 Not Found</title>\r\n<h1>Not Found</h1>\r\n<p>The requested URL was not found on the server.  If you entered the URL manually please check your spelling and try again.</p>`;
+            const contentLength = htmlContent.length;
+            const httpCode = "404 NOT FOUND";
+            const serverDate = new Date().toString();
+            const serverVersion = `Node.js/${process.version}`;
+            const contentType = "text/html";
+
+            var response = `HTTP/1.1 ${httpCode}\r\nDate: ${serverDate}\r\nContent-Type: ${contentType}\r\nContent-Length: ${contentLength}\r\nConnection: close\nServer: ${serverVersion}\r\n\r\n${htmlContent}`;
             socket.write(response);
           }
         }
-      }
+      } else if (reqType.toLowerCase() == "post") {
+        reqBody = req.split("\r\n\r\n")[1];
 
-      reqBody = req.split("\r\n\r\n")[1];
+        // console.log(`reqBody: ${reqBody}`);
+
+        var allFiles = fs.readdirSync(path.resolve(__dirname, homeDir));
+        var reqFileName = reqAddress.substring(1);
+        var reqAddress2 = reqAddress.split("/");
+        if (reqAddress2.length != 2) {
+          homeDir =
+            homeDir + reqAddress2.slice(0, reqAddress2.length - 1).join("/");
+          allFiles = fs.readdirSync(path.resolve(__dirname, homeDir));
+          reqFileName = reqAddress2[reqAddress2.length - 1];
+        }
+
+        var isProtectedDir = false;
+        if (allFiles.includes(".protected")) {
+          var response = `HTTP/1.1 403 Forbidden\r\n`;
+          socket.write(response);
+          isProtectedDir = true;
+        }
+
+        if (isProtectedDir == false) {
+          const filePath = path.resolve(
+            __dirname,
+            homeDir + "/" + reqFileName + ".json"
+          );
+
+          // console.log(`filePath: ${filePath}`);
+
+          fs.writeFileSync(filePath, reqBody, function (err) {
+            if (err) throw err;
+            // console.log("It's saved!");
+          });
+
+          const contentLength = reqBody.length;
+          // fs.readFileSync(filePath, {
+          //   encoding: "utf8",
+          //   flag: "r",
+          // }).length;
+          // console.log(`contentLength:${contentLength}`);
+          const httpCode = "200 OK";
+          const serverDate = new Date().toString();
+          const serverVersion = `Node.js/${process.version}`;
+          const contentType = "application/json";
+
+          var response = `HTTP/1.1 ${httpCode}\r\nDate: ${serverDate}\r\nContent-Type: ${contentType}\r\nContent-Length: ${contentLength}\r\nConnection: close\r\nServer: ${serverVersion}\r\n\r\n${reqBody}`;
+          socket.write(response);
+        }
+      }
 
       // console.log(reqSplit[0].split(/\s+/)[2]);
       // console.log(reqSplit[1]);
@@ -245,7 +329,7 @@ function handleClient(socket) {
       // );
     })
     .on("error", (err) => {
-      console.log("socket error %j", err);
+      if (argv.v) console.log("socket error %j", err);
       socket.destroy();
     })
     .on("end", () => {
