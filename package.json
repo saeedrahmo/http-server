@@ -17,6 +17,10 @@
   },
   "homepage": "https://github.com/saeedrahmo/http-server#readme",
   "dependencies": {
+    "ip": "^1.1.5",
+    "ip-to-array": "^0.1.0",
+    "ipaddr.js": "^1.5.3",
+    "udp-packet": "^2.0.0",
     "yargs": "^17.2.1"
   }
 }

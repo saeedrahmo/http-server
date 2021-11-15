@@ -8,6 +8,17 @@ var client = new net.Socket();
 var argv = yargs
   .usage("Usage: $0 command [arguments]")
   // examples based on https://httpbin.org/
+  .example("node httpc get http://127.0.0.1:8090/ -v")
+  .example("node httpc get http://127.0.0.1:8090/foo3 -v")
+  .example(
+    "node httpc post -h Content-Type:application/json -d '{\"bar\":1}' http://127.0.0.1:8090/bar -v"
+  )
+  .example("node httpc get http://127.0.0.1:8090/sub/foo -v")
+  .example("node httpc get http://127.0.0.1:8090/sub2/foo2 -v")
+  .example(
+    "node httpc post -h Content-Type:application/json -d '{\"bar\":1}' http://127.0.0.1:8091/bar -v"
+  )
+  .example("node httpc get http://127.0.0.1:8091/sub/hello -v")
   .example(
     'httpc get -v "http://httpbin.org/get?course=networking&assignment=1"'
   )
@@ -58,9 +69,10 @@ var argv = yargs
         });
     },
     handler: (argv) => {
+      //console.log(argv);
       if (argv._.length == 2) {
         // if (isUrlValid(argv._[1])) {
-        console.log(argv);
+        //console.log(argv);
         var parsedUrl = url.parse(removeQuetes(argv._[1]));
         client.connect(
           parsedUrl.port ? parsedUrl.port : 80,
@@ -134,7 +146,7 @@ var argv = yargs
         // console.log(isUrlValid(argv._[1]));
         //if (isUrlValid(argv._[1])) {
         var parsedUrl = url.parse(removeQuetes(argv._[1]));
-        console.log(`url: ${parsedUrl.hostname} port:${parsedUrl.port}`);
+        // console.log(`url: ${parsedUrl.hostname} port:${parsedUrl.port}`);
         client.connect(
           parsedUrl.port ? parsedUrl.port : 80,
           parsedUrl.hostname,
@@ -235,6 +247,8 @@ client.on("data", function (data) {
 
     redirect_func(host_name, redirect_url);
   }
+
+  client.end();
 });
 
 var redirect_func = (host_name, redirect_url) => {

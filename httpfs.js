@@ -39,7 +39,7 @@ const server = net.createServer(handleClient).on("error", (err) => {
 // TODO: family: "IPv4", address: "127.0.0.1"
 server.listen({ port: argv.port }, () => {
   if (argv.v) {
-    console.log(argv);
+    // console.log(argv);
     console.log("Echo server is listening at %j", server.address());
   }
 });
@@ -151,22 +151,27 @@ function handleClient(socket) {
           var response = `HTTP/1.1 ${httpCode}\nDate: ${serverDate}\nContent-Type: application/json\nContent-Length: ${contentLength}\nConnection: close\nServer: ${serverVersion}\n\n${jsonFiles}`;
           socket.write(response);
         } else {
+          console.log("***ELSE***");
           var allFiles = fs.readdirSync(path.resolve(__dirname, homeDir));
           var reqFileName = reqAddress.substring(1);
           var reqAddress2 = reqAddress.split("/");
+          console.log("***reqAddress2***");
+          console.log(reqAddress2);
           if (reqAddress2.length != 2) {
             homeDir =
               homeDir + reqAddress2.slice(0, reqAddress2.length - 1).join("/");
+            console.log(homeDir);
             allFiles = fs.readdirSync(path.resolve(__dirname, homeDir));
             reqFileName = reqAddress2[reqAddress2.length - 1];
           }
-
+          console.log("***IF***");
           // console.log(`REQ: ${reqFileName}`);
           // console.log(`allFiles: ${allFiles}`);
 
           var isFileExisted = false;
           for (const item of allFiles) {
             if (allFiles.includes(".protected")) {
+              console.log("***PROTECTED***");
               var response = `HTTP/1.1 403 Forbidden\r\n`;
               socket.write(response);
               isFileExisted = true;
