@@ -43,8 +43,8 @@ console.log(udp.decode(udp_pkt));
 const message = Buffer.from("Hello its me Saeed!");
 const client = dgram.createSocket("udp4");
 
-client.connect(8090, "127.0.0.1", (err) => {
-  client.send(message, (err) => {
+client.connect(3000, "127.0.0.1", (err) => {
+  client.send(udp_pkt, (err) => {
     //client.close();
   });
 });

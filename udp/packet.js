@@ -55,7 +55,7 @@ exports.encode = function (packet) {
   buf.writeUInt8(type, 0);
   buf.writeUInt32BE(sequenceNumber, 1);
   //   buf.fill(Buffer.from("127.0.0.1"), 5);
-  buf.writeUInt32LE(ip.toLong("1.0.0.126"), 5, 9);
+  buf.writeUInt32BE(ip.toLong("127.0.0.1"), 5);
   buf.writeUInt16BE(peerPort, 9);
   //buf.from(payLoad)z
   buf.fill(payLoad, 11);
@@ -70,7 +70,7 @@ exports.decode = function (buf) {
   return {
     type: buf.readUInt8(0),
     sequenceNumber: buf.readUInt32BE(1),
-    peerAddress: ip.fromLong(buf.readUInt32LE(5)),
+    peerAddress: ip.fromLong(buf.readUInt32BE(5)),
     peerPort: buf.readUInt16BE(9),
     payLoad: enc.decode(buf.slice(11)),
   };
