@@ -27,7 +27,7 @@ const argv = yargs
     describe:
       "Specifies the directory that the server will use to read/write requested files. Default is the current directory when launching the application.",
     type: "string",
-    default: "/home",
+    default: "/pub",
   })
   .version(false)
   .help("help").argv;

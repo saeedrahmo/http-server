@@ -11,20 +11,16 @@ exports.getPayloadLength = function (payload) {
 };
 
 exports.encode = function (packet) {
-  // var enc = new TextEncoder("utf-8"); // always utf-8
-  // var payLoad = enc.encode(packet.payLoad);
+  var enc = new TextEncoder("utf-8"); // always utf-8
+  var payLoad = enc.encode(packet.payLoad);
 
   var peerPort = packet.peerPort,
     peerAddress = packet.peerAddress,
     type = packet.type,
-    sequenceNumber = packet.sequenceNumber,
-    payLoad = packet.payLoad;
+    sequenceNumber = packet.sequenceNumber;
 
-  // var payLoad_length = payLoad.length;
-  // selected_payload =
-  //   payLoad_length > maxLen ? payLoad.slice(0, maxLen) : payLoad;
-
-  // console.log(`LENGTH: ${selected_payload.length}`);
+  if (payLoad.length > maxLen)
+    throw Error(`packet is exceeded max length: ${minLen + maxLen} bytes`);
 
   var buf = Buffer.alloc(payLoad.length + minLen);
 
@@ -32,7 +28,7 @@ exports.encode = function (packet) {
   buf.writeUInt32BE(sequenceNumber, 1);
   buf.writeUInt32BE(ip.toLong(peerAddress), 5);
   buf.writeUInt16BE(peerPort, 9);
-  buf.fill(selected_payload, 11);
+  buf.fill(payLoad, 11);
 
   return buf;
 };

@@ -1,0 +1,8 @@
+HTTP/1.1 200 OK
+Date: Sun Nov 21 2021 19:19:33 GMT-0500 (Eastern Standard Time)
+Content-Type: application/json
+Content-Length: 49
+Connection: close
+Server: Node.js/v16.13.0
+
+{"files_list":["bar","bye","foo3","foo4","foo5"]}

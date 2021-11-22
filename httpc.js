@@ -8,7 +8,7 @@ var client = new net.Socket();
 var argv = yargs
   .usage("Usage: $0 command [arguments]")
   // examples based on https://httpbin.org/
-  .example("node httpc get http://127.0.0.1:8090/ -v")
+  .example("node httpc get http://127.0.0.1:8082/ -v")
   .example("node httpc get http://127.0.0.1:8090/foo3 -v")
   .example(
     "node httpc post -h Content-Type:application/json -d '{\"bar\":1}' http://127.0.0.1:8090/bar -v"
@@ -142,6 +142,7 @@ var argv = yargs
         });
     },
     function (argv) {
+      console.log(argv);
       if (argv._.length == 2) {
         // console.log(isUrlValid(argv._[1]));
         //if (isUrlValid(argv._[1])) {

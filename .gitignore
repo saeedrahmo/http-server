@@ -105,5 +105,6 @@ dist
 
 # exclude everything
 home/
+log/
 # exception to the rule
 !home/.gitkeep 

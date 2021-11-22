@@ -1,7 +1,7 @@
 "use strict";
 
 const dgram = require("dgram");
-const udp = require("./packet");
+const udp = require("../packet");
 
 var msg = Buffer.from("someString", "utf-8").toString();
 
