@@ -12,12 +12,12 @@ exports.getPayloadLength = function (payload) {
 
 exports.encode = function (packet) {
   var enc = new TextEncoder("utf-8"); // always utf-8
+  var payLoad = enc.encode(packet.payLoad);
 
   var peerPort = packet.peerPort,
     peerAddress = packet.peerAddress,
     type = packet.type,
-    sequenceNumber = packet.sequenceNumber,
-    payLoad = packet.payLoad;
+    sequenceNumber = packet.sequenceNumber;
 
   if (payLoad.length > maxLen)
     throw Error(`packet is exceeded max length: ${minLen + maxLen} bytes`);

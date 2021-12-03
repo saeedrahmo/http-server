@@ -137,37 +137,64 @@ var argv = yargs
   ).argv;
 
 const client = dgram.createSocket("udp4");
-let timer = null;
-
-function isTimeout() {
-  timer = setTimeout(() => {
-    console.log("udp request timeout");
-    client.close();
-  }, 1000);
-}
 
 const initilizedSequenceNumber = 55; // random seq number
 var expectedSequenceNumber = initilizedSequenceNumber + 1;
 
-// Starts handshaking
-var udp_pkt = udp.encode({
-  type: udp.typeDict["SYN"],
+var pktSendBuff = {};
+var pktRecvBuff = {};
+let timer = null;
+var isConnected = false;
+var enc = new TextEncoder("utf-8"); // always utf-8
+
+function isTimeout() {
+  timer = setTimeout(() => {
+    // console.log("resend");
+    // console.log((expectedSequenceNumber - 1).toString());
+    // console.log(pktSendBuff);
+    // console.log(pktSendBuff[(expectedSequenceNumber - 1).toString()]);
+    var pkt = pktSendBuff[(expectedSequenceNumber - 1).toString()];
+    if (pkt !== undefined) packetSender(pkt);
+  }, 5);
+}
+
+function packetSender(pkt) {
+  expectedSequenceNumber = pkt.sequenceNumber + 1;
+  var udp_pkt = udp.encode(pkt);
+  client.send(udp_pkt, (err) => {});
+
+  // add pkt to dict by sec
+  if (pkt.type === udp.typeDict.DATA)
+    pktSendBuff[pkt.sequenceNumber.toString()] = pkt;
+  // set timer
+  isTimeout();
+
+  // console.log(
+  //   `client sent:${udp.getKeyByValue(udp.typeDict, pkt.type)}\tfrom:${
+  //     pkt.peerPort
+  //   }\tseq:${pkt.sequenceNumber}\texp:${expectedSequenceNumber}\tpay:\n`
+  // );
+}
+
+// Starts handshaking #1
+var udp_pkt = {
+  type: udp.typeDict.SYN,
   sequenceNumber: initilizedSequenceNumber, // x
   peerAddress: argv.serverhost,
   peerPort: argv.serverport,
-  payLoad: "",
-});
+  payLoad: enc.encode(""),
+};
 
 client.connect(argv.routerport, argv.routerhost, (err) => {
-  client.send(udp_pkt, (err) => {});
-  // isTimeout();
+  packetSender(udp_pkt);
 });
 
 client.on("message", (pkt, rinfo) => {
-  // clearTimeout(timer);
+  clearTimeout(timer);
 
   const p = udp.decode(pkt);
 
+  // log
   fs.appendFileSync(
     "./log/client-log.txt",
     `client got: ${udp.getKeyByValue(udp.typeDict, p.type)}\tseq:${
@@ -175,92 +202,118 @@ client.on("message", (pkt, rinfo) => {
     }\tpay:${p.payLoad}\texp${expectedSequenceNumber}\n`
   );
 
-  switch (udp.getKeyByValue(udp.typeDict, p.type)) {
-    case "Data":
-      console.log(p.payLoad);
-      break;
-    case "ACK":
-      break;
-    case "SYN":
-      break;
-    case "SYN_ACK":
-      var ack = parseInt(p.payLoad); // x+1
-      if (ack == expectedSequenceNumber) {
-        // Send ack y+1
-        p.type = udp.typeDict["ACK"]; // Complete handshaking
-        p.payLoad = p.sequenceNumber + 1; // Ack belongs to handshaking not data
-        p.sequenceNumber = p.sequenceNumber + 1; // y+1
+  // console.log(
+  //   `client got:${udp.getKeyByValue(udp.typeDict, p.type)}\tfrom:${
+  //     rinfo.port
+  //   }\tseq:${p.sequenceNumber}\texp:${expectedSequenceNumber}\tpay:${
+  //     p.payLoad
+  //   }\n`
+  // );
 
-        udp_pkt = udp.encode(p);
-        client.send(udp_pkt, (err) => {});
+  switch (p.type) {
+    case udp.typeDict.DATA:
+      var list = Object.keys(pktRecvBuff);
 
-        // Send data
-        var data = "";
-        p.type = udp.typeDict["Data"];
+      if (list.length === 0) {
+        pktRecvBuff[p.sequenceNumber.toString()] = p.payLoad;
 
-        if (argv._.length == 2) {
-          var parsedUrl = url.parse(removeQuetes(argv._[1]));
-          if (argv._[0] == "get") {
-            var data = `GET ${parsedUrl.path} HTTP/1.0\r\nHost:${
-              parsedUrl.hostname
-            }\r\n${
-              argv.h
-                ? Array.isArray(argv.h)
-                  ? argv.h
-                  : argv.h.join("\r\n")
-                : ""
-            }\r\n`;
-          }
-
-          if (argv._[0] == "post") {
-            data = `POST ${parsedUrl.path} HTTP/1.0\r\nHost:${
-              parsedUrl.hostname
-            }${
-              argv.h
-                ? Array.isArray(argv.h)
-                  ? "\r\n" + argv.h.join("\r\n")
-                  : "\r\n" + argv.h.trim()
-                : ""
-            }${
-              argv.d
-                ? "\r\n" +
-                  "Content-Length:" +
-                  argv.d.length +
-                  "\r\n\r\n" +
-                  argv.d
-                : ""
-            }${
-              argv.f
-                ? "\r\n" +
-                  "Content-Length:" +
-                  JSON.stringify(JSON.parse(fs.readFileSync(argv.f, "utf-8")))
-                    .length +
-                  "\r\n\r\n" +
-                  JSON.stringify(JSON.parse(fs.readFileSync(argv.f, "utf-8")))
-                : ""
-            }`;
-          } // end post
-        }
-
-        p.payLoad = data;
-        p.sequenceNumber = 1;
-        expectedSequenceNumber = p.sequenceNumber + 1;
-
-        udp_pkt = udp.encode(p);
-        client.send(udp_pkt, (err) => {});
+        p.type = udp.typeDict.ACK;
+        p.payLoad = enc.encode("");
+        packetSender(p);
       } else {
-        p.type = udp.typeDict["NAK"]; //TODO:check?
+        var last = parseInt(list.sort().slice(-1)[0]);
+        if (last + 1 === p.sequenceNumber) {
+          pktRecvBuff[p.sequenceNumber.toString()] = p.payLoad;
 
-        udp_pkt = udp.encode(p);
-        client.send(udp_pkt, (err) => {});
+          p.type = udp.typeDict.ACK;
+          p.payLoad = enc.encode("");
+          packetSender(p);
+        } else {
+          // Send NAK
+          p.type = udp.typeDict.NAK;
+          p.sequenceNumber = last + 1;
+          p.payLoad = enc.encode("");
+          packetSender(p);
+        }
       }
       break;
-    case "NAK":
-      console.log("NAK CLIENT");
+
+    case udp.typeDict.ACK:
+      // Send DATA
+      p.type = udp.typeDict.DATA;
+      p.sequenceNumber = p.sequenceNumber + 1;
+
+      var data = httpManager();
+      p.payLoad = getpktSendBuffPayload(data, p.sequenceNumber);
+
+      if (p.payLoad !== null) packetSender(p);
+      else {
+        p.type = udp.typeDict.FIN;
+        p.sequenceNumber = 100;
+        p.payLoad = enc.encode("");
+        packetSender(p);
+      }
+
+      break;
+
+    case udp.typeDict.NAK:
+      // Send DATA
+      p.type = udp.typeDict.DATA;
+
+      var data = httpManager();
+      p.payLoad = getpktSendBuffPayload(data, p.sequenceNumber);
+
+      if (p.payLoad !== null) packetSender(p);
+      else {
+        p.type = udp.typeDict.FIN;
+        p.sequenceNumber = 100;
+        p.payLoad = enc.encode("");
+        packetSender(p);
+      }
+
+      break;
+
+    case udp.typeDict.SYN:
+      break;
+
+    case udp.typeDict.FIN:
+      var list = Object.keys(pktRecvBuff).sort();
+      var deliver = "";
+      for (var i = 0; i < list.length; i++) {
+        deliver += pktRecvBuff[list[i]];
+      }
+      console.log(deliver);
+      break;
+
+    case udp.typeDict.SYN_ACK:
+      var ack = parseInt(p.payLoad); // x+1
+      if (ack == expectedSequenceNumber) {
+        // remove from send buff
+        delete pktSendBuff[(expectedSequenceNumber - 1).toString()];
+
+        // Send ack y+1
+        p.type = udp.typeDict.ACK; // Complete handshaking #3
+        p.payLoad = enc.encode(p.sequenceNumber + 1); // Ack belongs to handshaking not data
+        p.sequenceNumber = p.sequenceNumber + 1; // y+1
+
+        packetSender(p);
+        isConnected = true;
+
+        // Send data
+        p.type = udp.typeDict.DATA;
+        p.sequenceNumber = 1;
+        expectedSequenceNumber = p.sequenceNumber;
+
+        var data = httpManager();
+        p.payLoad = getpktSendBuffPayload(data, p.sequenceNumber);
+
+        packetSender(p);
+      }
+      break;
+
+    default:
       // code block
       break;
-    default:
-    // code block
   }
 });
 
@@ -271,4 +324,52 @@ client.on("error", (err) => {
 
 function removeQuetes(str) {
   return str.replace(/['"]+/g, "");
+}
+
+function getpktSendBuffPayload(data, sec) {
+  var arr = enc.encode(data);
+  var len = arr.length;
+
+  if (Math.ceil(len / 1013) < sec) return null;
+
+  var bottom = sec - 1;
+  var top = len < sec * 1013 ? len : sec * 1013;
+
+  return arr.slice(bottom, top);
+}
+
+function httpManager() {
+  var data = "";
+  if (argv._.length == 2) {
+    var parsedUrl = url.parse(removeQuetes(argv._[1]));
+    if (argv._[0] == "get") {
+      data = `GET ${parsedUrl.path} HTTP/1.0\r\nHost:${parsedUrl.hostname}\r\n${
+        argv.h ? (Array.isArray(argv.h) ? argv.h : argv.h.join("\r\n")) : ""
+      }\r\n`;
+    }
+
+    if (argv._[0] == "post") {
+      data = `POST ${parsedUrl.path} HTTP/1.0\r\nHost:${parsedUrl.hostname}${
+        argv.h
+          ? Array.isArray(argv.h)
+            ? "\r\n" + argv.h.join("\r\n")
+            : "\r\n" + argv.h.trim()
+          : ""
+      }${
+        argv.d
+          ? "\r\n" + "Content-Length:" + argv.d.length + "\r\n\r\n" + argv.d
+          : ""
+      }${
+        argv.f
+          ? "\r\n" +
+            "Content-Length:" +
+            JSON.stringify(JSON.parse(fs.readFileSync(argv.f, "utf-8")))
+              .length +
+            "\r\n\r\n" +
+            JSON.stringify(JSON.parse(fs.readFileSync(argv.f, "utf-8")))
+          : ""
+      }`;
+    } // end post
+  }
+  return data;
 }
