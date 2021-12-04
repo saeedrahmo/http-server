@@ -19,8 +19,9 @@ exports.encode = function (packet) {
     sequenceNumber = packet.sequenceNumber,
     payLoad = packet.payLoad;
 
-  if (payLoad.length > maxLen)
+  if (payLoad.length > maxLen) {
     throw Error(`packet is exceeded max length: ${minLen + maxLen} bytes`);
+  }
 
   var buf = Buffer.alloc(payLoad.length + minLen);
 

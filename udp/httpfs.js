@@ -4,6 +4,7 @@ const yargs = require("yargs");
 var fs = require("fs");
 const path = require("path");
 
+//./router --port=3000 --drop-rate=0.2 --max-delay=10ms --seed=1
 const argv = yargs
   .usage("node echoserver.js [--port port]")
   .option("v", {
@@ -30,6 +31,12 @@ const argv = yargs
       "Specifies the directory that the server will use to read/write requested files. Default is the current directory when launching the application.",
     type: "string",
     default: "/pub",
+  })
+  .option("t", {
+    alias: "time",
+    describe: "Specifies the time out.",
+    type: "number",
+    default: 1,
   })
   .version(false)
   .help("help").argv;
@@ -75,18 +82,20 @@ function readFilesSync(dir) {
 }
 
 var pktSendBuff = {};
-var pktRecvBuff = [];
+var pktRecvBuff = {};
 var port = 3000;
 let timer = null;
 var isConnected = false;
 var enc = new TextEncoder("utf-8"); // always utf-8
+var fin = 100;
 var fileData = "";
 
 function isTimeout() {
   timer = setTimeout(() => {
     var pkt = pktSendBuff[(expectedSequenceNumber - 1).toString()];
-    if (pkt !== undefined) packetSender(pkt, port);
-  }, 5);
+    if (pkt !== undefined && pkt.sequenceNumber !== fin)
+      packetSender(pkt, port);
+  }, argv.time);
 }
 
 function packetSender(pkt, port) {
@@ -95,13 +104,13 @@ function packetSender(pkt, port) {
   server.send(udp_pkt, port, (err) => {});
 
   // add pkt to dict by sec
-  if (pkt.type === udp.typeDict.DATA)
-    pktSendBuff[pkt.sequenceNumber.toString()] = pkt;
+  //if (pkt.type === udp.typeDict.DATA)
+  pktSendBuff[pkt.sequenceNumber.toString()] = pkt;
   // set timer
   isTimeout();
 
   // console.log(
-  //   `server sent:${udp.getKeyByValue(udp.typeDict, pkt.type)}\tfrom:${
+  //   `\x1b[34m server sent:${udp.getKeyByValue(udp.typeDict, pkt.type)}\tfrom:${
   //     pkt.peerPort
   //   }\tseq:${pkt.sequenceNumber}\texp:${expectedSequenceNumber}\tpay:\n`
   // );
@@ -121,7 +130,7 @@ function handleClient(pkt, rinfo) {
   );
 
   // console.log(
-  //   `server got:${udp.getKeyByValue(udp.typeDict, p.type)}\tfrom:${
+  //   `\x1b[36m server got:${udp.getKeyByValue(udp.typeDict, p.type)}\tfrom:${
   //     rinfo.port
   //   }\tseq:${p.sequenceNumber}\texp:${expectedSequenceNumber}\tpay:${
   //     p.payLoad
@@ -130,6 +139,10 @@ function handleClient(pkt, rinfo) {
 
   switch (p.type) {
     case udp.typeDict.DATA:
+      // not conn
+      // if (isConnected == false) p.type = udp.typeDict.NAK;
+      // p.sequenceNumber = initilizedSequenceNumber;
+
       var list = Object.keys(pktRecvBuff);
 
       if (list.length === 0) {
@@ -146,7 +159,13 @@ function handleClient(pkt, rinfo) {
           p.type = udp.typeDict.ACK;
           p.payLoad = enc.encode("");
           packetSender(p, rinfo.port);
+        } else if (last === p.sequenceNumber) {
+          // Discard redundant
+          p.type = udp.typeDict.ACK;
+          p.payLoad = enc.encode("");
+          packetSender(p, rinfo.port);
         } else {
+          // console.log(`NAK, ${Object.keys(pktRecvBuff)}, ${p}`);
           // Send NAK
           p.type = udp.typeDict.NAK;
           p.sequenceNumber = last + 1;
@@ -158,46 +177,107 @@ function handleClient(pkt, rinfo) {
       break;
 
     case udp.typeDict.FIN:
-      var list = Object.keys(pktRecvBuff).sort();
-      var deliver = "";
-      for (var i = 0; i < list.length; i++) {
-        deliver += pktRecvBuff[list[i]];
+      if (Object.keys(pktRecvBuff).length === 0) {
+        if (fileData.length === 0) {
+          // Send ACK for FIN
+          p.type = udp.typeDict.ACK;
+          p.payLoad = enc.encode("");
+          packetSender(p, rinfo.port);
+        } else {
+          // Send data
+          p.type = udp.typeDict.DATA;
+          p.sequenceNumber = 1;
+          expectedSequenceNumber = p.sequenceNumber;
+
+          p.payLoad = getpktSendBuffPayload(fileData, p.sequenceNumber);
+
+          packetSender(p, rinfo.port);
+          // var list = Object.keys(pktSendBuff);
+
+          // for (var i = 0; i < list.length; i++) {
+          //   console.log(list[i]);
+          //   // Send DATA
+          //   p.type = udp.typeDict.DATA;
+          //   p.sequenceNumber = parseInt(list[i]);
+          //   p.payLoad = getpktSendBuffPayload(fileData, p.sequenceNumber);
+
+          //   packetSender(p, rinfo.port);
+          // }
+        }
+      } else {
+        var list = Object.keys(pktRecvBuff).sort();
+        var deliver = "";
+        for (var i = 0; i < list.length; i++) {
+          deliver += pktRecvBuff[list[i]];
+        }
+        console.log(deliver);
+
+        // Clear rec buff
+        pktRecvBuff = {};
+
+        // Send data
+        p.type = udp.typeDict.DATA;
+        p.sequenceNumber = 1;
+        expectedSequenceNumber = p.sequenceNumber;
+
+        fileData = fileManager(deliver);
+        p.payLoad = getpktSendBuffPayload(fileData, p.sequenceNumber);
+
+        packetSender(p, rinfo.port);
+
+        // Clear rec buff
+        pktRecvBuff = {};
+
+        // Send ACK for FIN
+        p.type = udp.typeDict.ACK;
+        p.payLoad = enc.encode("");
+        packetSender(p, rinfo.port);
       }
-      console.log(deliver);
-
-      // Send data
-      p.type = udp.typeDict.DATA;
-      p.sequenceNumber = 1;
-      expectedSequenceNumber = p.sequenceNumber;
-
-      fileData = fileManager(deliver);
-      p.payLoad = getpktSendBuffPayload(fileData, p.sequenceNumber);
-
-      packetSender(p, rinfo.port);
 
       break;
 
     case udp.typeDict.ACK:
-      // y+1
-      if (p.sequenceNumber == expectedSequenceNumber && p.payLoad.length != 0) {
-        // Ack belongs to handshaking
-        isConnected = true; // Handshaking is completed #3
-        // remove from send buff
-        delete pktSendBuff[(expectedSequenceNumber - 1).toString()];
+      // if (isConnected == false) {
+      //   break;
+      // }
+
+      // Close con
+      if (p.sequenceNumber === fin) {
+        pktSendBuff = {};
+        isConnected = false;
+        //  server.close();
       } else {
-        // Ack belongs to data
+        // y+1
+        if (
+          p.sequenceNumber == expectedSequenceNumber &&
+          p.payLoad.length !== 0
+        ) {
+          // Ack belongs to handshaking
+          isConnected = true; // Handshaking is completed #3
+          // remove from send buff
+          delete pktSendBuff[(expectedSequenceNumber - 1).toString()];
+        } else {
+          // Ack belongs to data
 
-        // Send DATA
-        p.type = udp.typeDict.DATA;
-        p.sequenceNumber = p.sequenceNumber + 1;
-        p.payLoad = getpktSendBuffPayload(fileData, p.sequenceNumber);
+          // remove from send buff
+          delete pktSendBuff[p.sequenceNumber.toString()];
 
-        if (p.payLoad !== null) packetSender(p, rinfo.port);
-        else {
-          p.type = udp.typeDict.FIN;
-          p.sequenceNumber = 100;
-          p.payLoad = enc.encode("");
-          packetSender(p, rinfo.port);
+          // Send DATA
+          p.type = udp.typeDict.DATA;
+          p.sequenceNumber = p.sequenceNumber + 1;
+          p.payLoad = getpktSendBuffPayload(fileData, p.sequenceNumber);
+
+          if (p.payLoad !== null) packetSender(p, rinfo.port);
+          else {
+            // Clear send and rec buffs
+            pktSendBuff = {};
+
+            // Send FIN
+            p.type = udp.typeDict.FIN;
+            p.sequenceNumber = 100;
+            p.payLoad = enc.encode("");
+            packetSender(p, rinfo.port);
+          }
         }
       }
 
@@ -243,13 +323,18 @@ function getpktSendBuffPayload(data, sec) {
 
   if (Math.ceil(len / 1013) < sec) return null;
 
-  var bottom = sec - 1;
+  var bottom = (sec - 1) * 1013;
   var top = len < sec * 1013 ? len : sec * 1013;
-
+  // console.log(
+  //   `bottom:${bottom},top:${top},len:${len},arr:${
+  //     arr.slice(bottom, top).length
+  //   }`
+  // );
   return arr.slice(bottom, top);
 }
 
 function fileManager(req) {
+  // console.log(`FILE: ${req}`);
   var data = "";
 
   var reqSplit = req.split("\r\n");

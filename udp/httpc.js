@@ -124,6 +124,12 @@ var argv = yargs
         });
     }
   )
+  .option("t", {
+    alias: "time",
+    describe: "Specifies the time out.",
+    type: "number",
+    default: 1,
+  })
   .updateStrings({
     "Commands:": "The commands are:",
     //"Options:": " ",
@@ -146,6 +152,7 @@ var pktRecvBuff = {};
 let timer = null;
 var isConnected = false;
 var enc = new TextEncoder("utf-8"); // always utf-8
+var fin = 100;
 
 function isTimeout() {
   timer = setTimeout(() => {
@@ -153,9 +160,16 @@ function isTimeout() {
     // console.log((expectedSequenceNumber - 1).toString());
     // console.log(pktSendBuff);
     // console.log(pktSendBuff[(expectedSequenceNumber - 1).toString()]);
+    // console.log(
+    //   `resend: pktSendBuff:${Object.keys(
+    //     pktSendBuff
+    //   )}\texpectedSequenceNumber:${expectedSequenceNumber}`
+    // );
     var pkt = pktSendBuff[(expectedSequenceNumber - 1).toString()];
-    if (pkt !== undefined) packetSender(pkt);
-  }, 5);
+
+    //console.log(`pkt:${pkt.sequenceNumber}`);
+    if (pkt !== undefined && pkt.sequenceNumber !== fin) packetSender(pkt);
+  }, argv.time);
 }
 
 function packetSender(pkt) {
@@ -164,13 +178,13 @@ function packetSender(pkt) {
   client.send(udp_pkt, (err) => {});
 
   // add pkt to dict by sec
-  if (pkt.type === udp.typeDict.DATA)
-    pktSendBuff[pkt.sequenceNumber.toString()] = pkt;
+  //if (pkt.type === udp.typeDict.DATA)
+  pktSendBuff[pkt.sequenceNumber.toString()] = pkt;
   // set timer
   isTimeout();
 
   // console.log(
-  //   `client sent:${udp.getKeyByValue(udp.typeDict, pkt.type)}\tfrom:${
+  //   `\x1b[35m client sent:${udp.getKeyByValue(udp.typeDict, pkt.type)}\tfrom:${
   //     pkt.peerPort
   //   }\tseq:${pkt.sequenceNumber}\texp:${expectedSequenceNumber}\tpay:\n`
   // );
@@ -203,7 +217,7 @@ client.on("message", (pkt, rinfo) => {
   );
 
   // console.log(
-  //   `client got:${udp.getKeyByValue(udp.typeDict, p.type)}\tfrom:${
+  //   `\x1B[93m client got:${udp.getKeyByValue(udp.typeDict, p.type)}\tfrom:${
   //     rinfo.port
   //   }\tseq:${p.sequenceNumber}\texp:${expectedSequenceNumber}\tpay:${
   //     p.payLoad
@@ -227,8 +241,14 @@ client.on("message", (pkt, rinfo) => {
 
           p.type = udp.typeDict.ACK;
           p.payLoad = enc.encode("");
+          packetSender(p, rinfo.port);
+        } else if (last === p.sequenceNumber) {
+          // Discard redundant
+          p.type = udp.typeDict.ACK;
+          p.payLoad = enc.encode("");
           packetSender(p);
         } else {
+          console.log(`NAK, ${Object.keys(pktRecvBuff)}, ${p}`);
           // Send NAK
           p.type = udp.typeDict.NAK;
           p.sequenceNumber = last + 1;
@@ -239,19 +259,39 @@ client.on("message", (pkt, rinfo) => {
       break;
 
     case udp.typeDict.ACK:
-      // Send DATA
-      p.type = udp.typeDict.DATA;
-      p.sequenceNumber = p.sequenceNumber + 1;
+      if (isConnected == false) {
+        break;
+      }
 
-      var data = httpManager();
-      p.payLoad = getpktSendBuffPayload(data, p.sequenceNumber);
+      // Close con
+      if (p.sequenceNumber === fin) {
+        pktSendBuff = {};
+        isConnected = false;
+        break;
+      } else {
+        // remove from send buff
+        delete pktSendBuff[p.sequenceNumber.toString()];
 
-      if (p.payLoad !== null) packetSender(p);
-      else {
-        p.type = udp.typeDict.FIN;
-        p.sequenceNumber = 100;
-        p.payLoad = enc.encode("");
-        packetSender(p);
+        // Send DATA
+        p.type = udp.typeDict.DATA;
+        p.sequenceNumber = p.sequenceNumber + 1;
+
+        var data = httpManager();
+        p.payLoad = getpktSendBuffPayload(data, p.sequenceNumber);
+
+        if (p.payLoad !== null) packetSender(p);
+        else {
+          // Clear send and rec buffs
+          pktSendBuff = {};
+
+          // Send FIN
+          p.type = udp.typeDict.FIN;
+          p.sequenceNumber = fin;
+          p.payLoad = enc.encode("");
+          packetSender(p);
+
+          // pktRecvBuff = {};
+        }
       }
 
       break;
@@ -265,6 +305,7 @@ client.on("message", (pkt, rinfo) => {
 
       if (p.payLoad !== null) packetSender(p);
       else {
+        // Send FIN
         p.type = udp.typeDict.FIN;
         p.sequenceNumber = 100;
         p.payLoad = enc.encode("");
@@ -277,12 +318,36 @@ client.on("message", (pkt, rinfo) => {
       break;
 
     case udp.typeDict.FIN:
-      var list = Object.keys(pktRecvBuff).sort();
-      var deliver = "";
-      for (var i = 0; i < list.length; i++) {
-        deliver += pktRecvBuff[list[i]];
+      //client.close();
+      // console.log(`FIN ${Object.keys(pktRecvBuff).length}`);
+      if (Object.keys(pktRecvBuff).length === 0) {
+        // Send ACK for FIN
+        p.type = udp.typeDict.ACK;
+        p.payLoad = enc.encode("");
+        packetSender(p);
+        break;
+      } else {
+        var list = Object.keys(pktRecvBuff).sort();
+        var deliver = "";
+        for (var i = 0; i < list.length; i++) {
+          deliver += pktRecvBuff[list[i]];
+        }
+
+        console.log(deliver);
+
+        // Clear rec buff
+        pktRecvBuff = {};
+
+        // Send ACK for FIN
+        p.type = udp.typeDict.ACK;
+        p.payLoad = enc.encode("");
+        packetSender(p);
+
+        client.close();
+        // Clear send buff
+        //packetSender = {};
       }
-      console.log(deliver);
+
       break;
 
     case udp.typeDict.SYN_ACK:
@@ -332,7 +397,7 @@ function getpktSendBuffPayload(data, sec) {
 
   if (Math.ceil(len / 1013) < sec) return null;
 
-  var bottom = sec - 1;
+  var bottom = (sec - 1) * 1013;
   var top = len < sec * 1013 ? len : sec * 1013;
 
   return arr.slice(bottom, top);
