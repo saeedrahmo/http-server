@@ -183,11 +183,11 @@ function packetSender(pkt) {
   // set timer
   isTimeout();
 
-  // console.log(
-  //   `\x1b[35m client sent:${udp.getKeyByValue(udp.typeDict, pkt.type)}\tfrom:${
-  //     pkt.peerPort
-  //   }\tseq:${pkt.sequenceNumber}\texp:${expectedSequenceNumber}\tpay:\n`
-  // );
+  console.log(
+    `\x1b[35m client sent:${udp.getKeyByValue(udp.typeDict, pkt.type)}\tfrom:${
+      pkt.peerPort
+    }\tseq:${pkt.sequenceNumber}\texp:${expectedSequenceNumber}\tpay:\n`
+  );
 }
 
 // Starts handshaking #1
@@ -209,20 +209,20 @@ client.on("message", (pkt, rinfo) => {
   const p = udp.decode(pkt);
 
   // log
-  fs.appendFileSync(
-    "./log/client-log.txt",
-    `client got: ${udp.getKeyByValue(udp.typeDict, p.type)}\tseq:${
-      p.sequenceNumber
-    }\tpay:${p.payLoad}\texp${expectedSequenceNumber}\n`
-  );
-
-  // console.log(
-  //   `\x1B[93m client got:${udp.getKeyByValue(udp.typeDict, p.type)}\tfrom:${
-  //     rinfo.port
-  //   }\tseq:${p.sequenceNumber}\texp:${expectedSequenceNumber}\tpay:${
-  //     p.payLoad
-  //   }\n`
+  // fs.appendFileSync(
+  //   "./log/client-log.txt",
+  //   `client got: ${udp.getKeyByValue(udp.typeDict, p.type)}\tseq:${
+  //     p.sequenceNumber
+  //   }\tpay:${p.payLoad}\texp${expectedSequenceNumber}\n`
   // );
+
+  console.log(
+    `\x1B[93m client got:${udp.getKeyByValue(udp.typeDict, p.type)}\tfrom:${
+      rinfo.port
+    }\tseq:${p.sequenceNumber}\texp:${expectedSequenceNumber}\tpay:${
+      p.payLoad
+    }\n`
+  );
 
   switch (p.type) {
     case udp.typeDict.DATA:

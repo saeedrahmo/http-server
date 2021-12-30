@@ -109,11 +109,11 @@ function packetSender(pkt, port) {
   // set timer
   isTimeout();
 
-  // console.log(
-  //   `\x1b[34m server sent:${udp.getKeyByValue(udp.typeDict, pkt.type)}\tfrom:${
-  //     pkt.peerPort
-  //   }\tseq:${pkt.sequenceNumber}\texp:${expectedSequenceNumber}\tpay:\n`
-  // );
+  console.log(
+    `\x1b[34m server sent:${udp.getKeyByValue(udp.typeDict, pkt.type)}\tfrom:${
+      pkt.peerPort
+    }\tseq:${pkt.sequenceNumber}\texp:${expectedSequenceNumber}\tpay:\n`
+  );
 }
 
 function handleClient(pkt, rinfo) {
@@ -122,20 +122,20 @@ function handleClient(pkt, rinfo) {
   const p = udp.decode(pkt);
 
   // log
-  fs.appendFileSync(
-    "./log/server-log.txt",
-    `server got:${udp.getKeyByValue(udp.typeDict, p.type)}\tseq:${
-      p.sequenceNumber
-    }\texp:${expectedSequenceNumber}\tpay:${p.payLoad}\n`
-  );
-
-  // console.log(
-  //   `\x1b[36m server got:${udp.getKeyByValue(udp.typeDict, p.type)}\tfrom:${
-  //     rinfo.port
-  //   }\tseq:${p.sequenceNumber}\texp:${expectedSequenceNumber}\tpay:${
-  //     p.payLoad
-  //   }\n`
+  // fs.appendFileSync(
+  //   "./log/server-log.txt",
+  //   `server got:${udp.getKeyByValue(udp.typeDict, p.type)}\tseq:${
+  //     p.sequenceNumber
+  //   }\texp:${expectedSequenceNumber}\tpay:${p.payLoad}\n`
   // );
+
+  console.log(
+    `\x1b[36m server got:${udp.getKeyByValue(udp.typeDict, p.type)}\tfrom:${
+      rinfo.port
+    }\tseq:${p.sequenceNumber}\texp:${expectedSequenceNumber}\tpay:${
+      p.payLoad
+    }\n`
+  );
 
   switch (p.type) {
     case udp.typeDict.DATA:
